@@ -40,6 +40,7 @@
 //     }
 // };
 // module.exports ={getNewsByLanguage}
+const mongoose = require('mongoose')
 const News = require('../models/newsModel');
 const Category = require('../models/categoryModel'); // Import your Category model
 
@@ -105,5 +106,69 @@ const getNewsByLanguage = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+const getNewsById = async(req, res)=>{
+    const lang = req.params.lang.toLowerCase() 
+    const articleId = req.params.id 
+try {
+    const newsItem = await News.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(articleId) // Convert ID string to MongoDB ObjectId
+            }
+        },
+        {
+            $lookup: {
+                from: 'categories', // Assuming your categories collection name is 'categories'
+                localField: 'categoryId',
+                foreignField: '_id',
+                as: 'categoryData'
+            }
+        },
+        {
+            $addFields: {
+                category: {
+                    $cond: [
+                        { $eq: [lang, 'en'] },
+                        '$categoryData.category',
+                        '$categoryData.categoryPa'
+                    ]
+                }
+            }
+        },
+        {
+            $project: {
+                title: {
+                    $cond: [
+                        { $eq: [lang, 'en'] },
+                        '$title',
+                        '$titlePa'
+                    ]
+                },
+                description: {
+                    $cond: [
+                        { $eq: [lang, 'en'] },
+                        '$description',
+                        '$descriptionPa'
+                    ]
+                },
+                img: 1,
+                videoUrl: 1,
+                createdAt: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                category: 1
+            }
+        }
+    ]);
 
-module.exports = { getNewsByLanguage };
+    if (!newsItem || newsItem.length === 0) {
+        return res.status(404).json({ error: 'News item not found' });
+    }
+
+    res.json(newsItem[0]); // Return the first item (assuming the ID is unique)
+
+} catch (error) {
+    console.error('Error fetching news by ID and language:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+}
+}
+
+module.exports = { getNewsByLanguage, getNewsById};
